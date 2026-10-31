@@ -16,6 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { runtime } from './lib/runtime.js'
+import { cancelDownload, listDownloads, pauseDownload, resumeDownload } from './lib/downloads.js'
 import { aiBrowserDataDir } from './lib/home.js'
 import {
   ACTION_CAPABILITIES,
@@ -41,10 +42,11 @@ const BROWSER_PROMPT = `你在「AI 浏览器模式」下工作：用户对话�
 
 窗口与操作流程：
 1. 先 state / windows 查看可用窗口（每个窗口有 id、URL、标题、权限级别、是否激活）；用 window 参数指定窗口，省略则操作当前激活窗口。
-2. 复杂任务可以 new_window 开新窗口并行处理（例如一个窗口查资料、一个窗口填表），不会互相影响。
+2. 复杂任务可以 new_window 开新窗口并行处理（例如一个窗口查资料、一个窗口填表），不会互相影响。页面里会打开新标签页的按钮/链接（target=_blank、window.open）会自动新建窗口并切换到新窗口，你可以直接用 window 参数操作它；窗口数量不限。
 3. 打开网页用 open；读页面用 read（返回正文 + 带 index 的可交互元素）；click/type 用 read 返回的 index；页面跳转后重新 read。
 4. 下载用 download（url 或 index），文件保存到当前工作区的「browser download」文件夹，工具结果会返回保存路径；跨域 CDN 会自动改用 Host 直连下载。用 downloads 动作可以查看已下载文件列表。
-5. request_access 用法：target_action 指定要执行的动作，同时必须带上该动作需要的参数（open/download/new_window 的 url、click/type 的 index 或 selector、type 的 text 等），并填写 reason。参数缺失会导致调用失败。
+5. 下载任务：用 downloads 查看进行中的任务（含 id、状态 paused/downloading/error、速度与进度）；用 pause_download / resume_download / cancel_download + download_id 暂停、继续或取消任务。
+6. request_access 用法：target_action 指定要执行的动作，同时必须带上该动作需要的参数（open/download/new_window 的 url、click/type 的 index 或 selector、type 的 text 等），并填写 reason。参数缺失会导致调用失败。
 
 权限（每个窗口独立四级，可在面板工具栏刷新按钮右边切换）：
 - 仅可查看：state / windows / read / screenshot / inspect；
@@ -71,7 +73,7 @@ const PARAMETERS = {
       description:
         'state 查看当前状态；windows 列出窗口；downloads 查看已下载文件；read 读取页面；open 打开网址；click/type/press 操作元素；scroll 滚动；' +
         'back/forward/reload 导航；screenshot 截图；download 下载文件；new_window 新建窗口；close_window 关闭窗口；' +
-        'request_access 主动申请一次授权（需 target_action、目标动作参数与 reason）。',
+        'pause_download/resume_download/cancel_download 用 download_id 暂停/继续/取消下载任务；request_access 主动申请一次授权（需 target_action、目标动作参数与 reason）。',
     },
     window: { type: 'string', description: '目标窗口 id（来自 state/windows），省略则用当前激活窗口。' },
     url: { type: 'string', description: 'open / download / new_window 使用的 HTTP(S) 网址。' },
@@ -79,6 +81,7 @@ const PARAMETERS = {
     selector: { type: 'string', description: '可选的 CSS selector，作为 index 的替代定位方式。' },
     text: { type: 'string', description: 'type 要输入的文字。' },
     key: { type: 'string', description: 'press 要按下的键，例如 Enter、Tab、Escape、ArrowDown。' },
+    downloadId: { type: 'string', description: 'downloads 返回的下载任务 id；pause_download / resume_download / cancel_download 使用。' },
     direction: { type: 'string', enum: ['up', 'down'], description: 'scroll 的方向，默认 down。' },
     amount: { type: 'number', description: 'scroll 滚动的屏数（1-10），默认 1。' },
     maxChars: { type: 'integer', description: 'read 返回页面正文的最大字符数（1000-40000），默认 12000。' },
@@ -221,6 +224,7 @@ function validateAction(input) {
     }
   }
   if (input.action === 'close_window' && input.window === '') return 'close_window 需要 window id'
+  if ((input.action === 'pause_download' || input.action === 'resume_download' || input.action === 'cancel_download') && input.downloadId === '') return input.action + ' 需要 downloadId（可先用 downloads 查看）'
   return null
 }
 
@@ -394,10 +398,20 @@ function formatWindows(value) {  const windows = Array.isArray(value.windows) ? 
 
 function formatDownloads(listing) {
   const files = Array.isArray(listing?.files) ? listing.files : []
+  const active = Array.isArray(listing?.active) ? listing.active : []
   const folder = typeof listing?.folderPath === 'string' ? listing.folderPath : ''
   const lines = [`【AI 浏览器】下载目录：${folder}${listing?.fallback === true ? '（工作区不可用，已回退到 DSH 数据目录）' : ''}`]
+  if (active.length > 0) {
+    lines.push(`进行中的下载任务（${active.length} 个）：`)
+    active.forEach((job) => {
+      const total = typeof job.total === 'number' && job.total > 0 ? ` / ${(job.total / 1048576).toFixed(1)}MB` : ''
+      const speed = typeof job.speed === 'number' && job.speed > 0 ? `，${(job.speed / 1048576).toFixed(1)}MB/s` : ''
+      lines.push(`- id ${job.id}：${job.name} · ${job.status} · ${(job.bytes / 1048576).toFixed(1)}MB${total}${speed}`)
+    })
+    lines.push('（可对任务 id 使用 pause_download / resume_download / cancel_download。）')
+  }
   if (files.length === 0) {
-    lines.push('还没有下载文件。')
+    if (active.length === 0) lines.push('还没有下载文件。')
     return lines.join('\n')
   }
   lines.push(`共 ${files.length} 个文件（最近在前）：`)
@@ -507,12 +521,32 @@ export function createBrowserTool(ctx) {
       }
 
       if (action === 'downloads') {
-        const listing = await runtime.listDownloads(sessionId)
+        const listing = await listDownloads(sessionId)
         return {
           ok: true,
           action,
           summary: formatDownloads(listing),
           data: listing,
+          level: state.defaultLevel,
+        }
+      }
+
+      if (action === 'pause_download' || action === 'resume_download' || action === 'cancel_download') {
+        let job
+        try {
+          if (action === 'pause_download') job = pauseDownload(sessionId, input.downloadId)
+          else if (action === 'resume_download') job = resumeDownload(sessionId, input.downloadId)
+          else job = cancelDownload(sessionId, input.downloadId)
+        } catch (error) {
+          return fail(action, error instanceof Error ? error.message : String(error))
+        }
+        const verb = action === 'pause_download' ? '已暂停' : action === 'resume_download' ? '已继续' : '已取消'
+        const total = typeof job.total === 'number' && job.total > 0 ? ` / ${(job.total / 1048576).toFixed(1)}MB` : ''
+        return {
+          ok: true,
+          action,
+          summary: `【AI 浏览器】${verb}下载任务：${job.name}（${(job.bytes / 1048576).toFixed(1)}MB${total}，状态 ${job.status}）`,
+          data: { job },
           level: state.defaultLevel,
         }
       }

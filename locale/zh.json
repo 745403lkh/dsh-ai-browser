@@ -47,5 +47,14 @@
     "navigateTitle": "打开网页",
     "screenshotTitle": "页面截图",
     "blocked": "当前浏览器权限不允许此操作"
-  }
+  },
+  "downloads.title": "下载",
+  "downloads.more": "查看更多",
+  "downloads.folder": "打开文件夹",
+  "downloads.done": "已完成",
+  "downloads.less": "收起",
+  "downloads.pause": "暂停",
+  "downloads.resume": "继续",
+  "downloads.cancel": "取消任务",
+  "downloads.paused": "已暂停"
 }

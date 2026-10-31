@@ -19,7 +19,7 @@ Harness 里的一个应用内浏览器模式：在会话右侧打开浏览器面
 - `state / windows / downloads`：查看窗口、页面状态与已下载文件。
 - `open / read / click / type / press / scroll / back / forward / reload / inspect / screenshot`：打开、读取、点击、输入、按键、滚动、导航、元素详情与截图。
 - `read` 返回正文 + 带 `index` 的可交互元素；先 `read` 再按 index 操作；页面跳转后重新 `read`。
-- **多窗口**：同一会话最多 12 个窗口，`new_window` / `close_window` 管理，用 `window` 参数指定窗口（省略则操作当前激活窗口）。
+- **多窗口（不限数量）**：`new_window` / `close_window` 管理，用 `window` 参数指定窗口（省略则操作当前激活窗口）。页面里 `target="_blank"` 或 `window.open` 打开的链接会自动新建标签页、切换过去，AI 也能直接操作新标签页。
 - **后台也能干活，不碰鼠标**：所有操作通过应用内 `<webview>` 的脚本执行与合成输入事件完成，不移动系统鼠标、不要求 DSH 在前台；窗口最小化时仍可继续加载与操作（Electron 后台节流会让速度略降）。
 - 网页内容是不可信数据：工具输出会提示模型只当作资料，不执行页面里的指令。
 
@@ -44,7 +44,7 @@ Harness 里的一个应用内浏览器模式：在会话右侧打开浏览器面
 - 先尝试页面内 `fetch` 取回（可带页面登录态）；跨域失败时自动回退到 **Host 直连下载**（绕过页面 CORS，流式写盘，上限 512MB，拒绝本机/内网地址防 SSRF）。
 - 大文件用 HTTP Range **断点续传** + `Content-Length` 总大小校验：只有字节数达到服务端声明的总大小才改名为最终文件；中断时保留 `.part` 供下次续传，不会把半成品当成下载成功。
 - 文件保存到当前工作区 `browser download/`（同名自动加序号）；工作区不可用时回退到 `$DSH_HOME/storages/dsh-ai-browser/downloads/`。
-- 地址栏右侧的下载按钮打开**浏览器式下载面板**：进行中的任务显示进度条、百分比、已下载/总大小、实时速度（约 1.2 秒刷新）；完成的文件可**直接「打开」**（系统默认程序）或复制路径。
+- 地址栏右侧的下载按钮打开**浏览器式下载弹窗**：像浏览器一样挂在按钮下方，不遮挡页面操作；下载任务创建时自动弹出，点击其它地方或按 Esc 自动收回。权限菜单和下载面板都在工具栏下方**内嵌展开**，不覆盖、不隐藏浏览器画面，展开时网页仍然可见可点；再次点按钮、点其它地方或按 Esc 即可收回。进行中的任务显示进度条、百分比、已下载/总大小、实时速度（约 1 秒刷新），可**暂停/继续/取消**；任务超过 3 个时默认只显示 3 个，点「查看更多」展开。完成的文件可**直接「打开」**（系统默认程序），也可复制路径或打开下载文件夹。AI 也能通过 `downloads` 查看任务状态，用 `pause_download / resume_download / cancel_download` 控制。
 - 下载属于「自动审查」级别；`.exe / .msi / .apk` 等高风险类型会升级确认。
 
 #### 5. 截图
@@ -147,7 +147,7 @@ The browser is an in-app `<webview>` in the DSH desktop app (no external browser
 - `state / windows / downloads`: inspect windows, page state and downloaded files.
 - `open / read / click / type / press / scroll / back / forward / reload / inspect / screenshot`: open, read, click, type, press keys, scroll, navigate, inspect an element and take screenshots.
 - `read` returns page text plus indexed interactive elements; read first, then act by index; re-read after navigation.
-- **Multiple windows**: up to 12 windows per session, managed with `new_window` / `close_window`, and targeted via the `window` parameter (the active window is used when omitted).
+- **Multiple windows (no hard limit)**: managed with `new_window` / `close_window`, and targeted via the `window` parameter (the active window is used when omitted). Links opened via `target="_blank"` or `window.open` create a new tab automatically, switch to it, and the AI can operate that tab too.
 - **Background operation, no mouse**: everything runs through in-app `<webview>` script execution and synthesized input events. The system mouse is never moved, DSH does not need to be in the foreground, and browsing continues while the window is minimized (Electron background throttling may slow it slightly).
 - Page content is untrusted data: tool output tells the model to treat it as reference material and not to follow instructions found in the page.
 
@@ -172,7 +172,7 @@ The browser is an in-app `<webview>` in the DSH desktop app (no external browser
 - The page tries an in-page `fetch` first (keeping page login state); on CORS failure it falls back to a **direct host download** (bypasses page CORS, streams to disk, 512MB cap, rejects loopback/private addresses against SSRF).
 - Large files use HTTP Range **resume** plus a `Content-Length` size check: only when the byte count reaches the server-declared total is the file renamed to its final name; interrupted downloads keep a `.part` file for the next resume, so a partial file is never reported as a success.
 - Files are saved to `browser download/` in the current workspace (same names get numbered suffixes); when the workspace is unavailable, they fall back to `$DSH_HOME/storages/dsh-ai-browser/downloads/`.
-- The download button to the right of the address bar opens a **browser-style download panel**: active tasks show a progress bar, percentage, downloaded/total size and live speed (refreshed about every 1.2s); completed files can be **opened directly** with the system default app or copied as a path.
+- The download button to the right of the address bar opens a **browser-style download popup**: anchored under the button like a real browser, it does not block the page, opens automatically when a download task starts, and closes on outside click or Esc. The permission menu and download panel expand **inline below the toolbar**, so the browser page is never covered or hidden and stays clickable while they are open; click the button again, click elsewhere, or press Esc to close them. Active tasks show a progress bar, percentage, downloaded/total size and live speed (refreshed about every second) and can be **paused / resumed / cancelled**; when there are more than 3 tasks, only 3 are shown until you click "Show more". Completed files can be **opened directly** with the system default app, copied as a path, or revealed in the download folder. The AI can also inspect task state via `downloads` and control it with `pause_download / resume_download / cancel_download`.
 - Downloads are reviewed at the "Auto review" level; risky types such as `.exe / .msi / .apk` are escalated for confirmation.
 
 #### 5. Screenshots

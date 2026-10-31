@@ -47,5 +47,14 @@
     "navigateTitle": "Open page",
     "screenshotTitle": "Screenshot",
     "blocked": "The current browser permission does not allow this action"
-  }
+  },
+  "downloads.title": "Downloads",
+  "downloads.more": "Show more",
+  "downloads.folder": "Open folder",
+  "downloads.done": "Completed",
+  "downloads.less": "Show less",
+  "downloads.pause": "Pause",
+  "downloads.resume": "Resume",
+  "downloads.cancel": "Cancel task",
+  "downloads.paused": "Paused"
 }
