@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "title": "AI 浏览器",
+    "description": "在会话右侧打开可被 AI 操作的浏览器，并提供四级浏览器权限与授权越权机制。"
+  },
+  "mode": {
+    "name": "AI 浏览器模式",
+    "description": "可以操作浏览器的 AI 助手：在右侧浏览器里打开网页、读取页面、点击和填写。"
+  },
+  "panel": {
+    "title": "AI 浏览器",
+    "addressPlaceholder": "输入网址后回车",
+    "back": "后退",
+    "forward": "前进",
+    "reload": "刷新",
+    "openExternal": "在系统浏览器中打开",
+    "loading": "加载中…",
+    "ready": "就绪",
+    "error": "浏览器启动失败",
+    "retry": "重试",
+    "empty": "输入网址开始浏览，或直接在对话里告诉 AI 要做什么。"
+  },
+  "permission": {
+    "label": "浏览器权限",
+    "view": "仅可查看",
+    "simple": "仅简单操作",
+    "review": "自动审查",
+    "full": "完全权限",
+    "viewHint": "AI 只能读取页面内容、截图，不能跳转或操作页面。",
+    "simpleHint": "AI 可以跳转、刷新、前进后退、滚动和输入文字，不能点击或提交表单。",
+    "reviewHint": "AI 可以点击页面和做保守的复杂操作，这些操作会经过自动审查。",
+    "fullHint": "AI 可以执行任何浏览器操作，不再进行确认。请仅在信任的网站和任务中使用。",
+    "warningTitle": "确认开启更高的浏览器权限？",
+    "warningReview": "「自动审查」允许 AI 点击页面和执行保守的复杂操作。自动审查可能漏判，请确认 AI 正在访问的网站和任务是可信的。",
+    "warningFull": "「完全权限」允许 AI 执行任何浏览器操作，包括提交表单、下载、上传等。此权限不再经过确认，可能造成不可撤销的后果。",
+    "warningConfirm": "仍要开启",
+    "warningCancel": "取消",
+    "switchFailed": "浏览器权限切换失败",
+    "requestApproval": "AI 请求临时执行超出当前权限的浏览器操作",
+    "grantOnce": "允许一次",
+    "grantDeny": "拒绝"
+  },
+  "tool": {
+    "readTitle": "读取页面",
+    "clickTitle": "点击页面",
+    "typeTitle": "输入文字",
+    "navigateTitle": "打开网页",
+    "screenshotTitle": "页面截图",
+    "blocked": "当前浏览器权限不允许此操作"
+  }
+}

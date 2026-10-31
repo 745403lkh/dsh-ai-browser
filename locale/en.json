@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "title": "AI Browser",
+    "description": "Open an AI-controllable browser beside the conversation, with four browser permission levels and authorization-based escalation."
+  },
+  "mode": {
+    "name": "AI Browser Mode",
+    "description": "An AI assistant that can operate a browser: open pages, read content, click and fill in forms in the right-hand browser panel."
+  },
+  "panel": {
+    "title": "AI Browser",
+    "addressPlaceholder": "Enter a URL and press Enter",
+    "back": "Back",
+    "forward": "Forward",
+    "reload": "Reload",
+    "openExternal": "Open in system browser",
+    "loading": "Loading…",
+    "ready": "Ready",
+    "error": "Could not start the browser",
+    "retry": "Retry",
+    "empty": "Enter a URL to start browsing, or tell the AI what to do in the conversation."
+  },
+  "permission": {
+    "label": "Browser permission",
+    "view": "View only",
+    "simple": "Simple actions",
+    "review": "Auto review",
+    "full": "Full access",
+    "viewHint": "The AI can read the page and take screenshots, but cannot navigate or act on the page.",
+    "simpleHint": "The AI can navigate, reload, go back or forward, scroll and type text, but cannot click or submit forms.",
+    "reviewHint": "The AI can click the page and perform conservative complex actions, which go through an automatic review.",
+    "fullHint": "The AI can perform any browser action without further confirmation. Use it only with trusted sites and tasks.",
+    "warningTitle": "Enable a higher browser permission?",
+    "warningReview": "Auto review lets the AI click the page and perform conservative complex actions. An automatic review can miss risks; make sure the site and task are trustworthy.",
+    "warningFull": "Full access lets the AI perform any browser action, including submitting forms, downloads and uploads, without further confirmation. These actions may be irreversible.",
+    "warningConfirm": "Enable anyway",
+    "warningCancel": "Cancel",
+    "switchFailed": "Failed to change browser permission",
+    "requestApproval": "The AI requests one browser action beyond the current permission",
+    "grantOnce": "Allow once",
+    "grantDeny": "Deny"
+  },
+  "tool": {
+    "readTitle": "Read page",
+    "clickTitle": "Click page",
+    "typeTitle": "Type text",
+    "navigateTitle": "Open page",
+    "screenshotTitle": "Screenshot",
+    "blocked": "The current browser permission does not allow this action"
+  }
+}
