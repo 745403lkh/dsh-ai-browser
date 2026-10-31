@@ -121,3 +121,8 @@ Harness 里的一个应用内浏览器模式：在会话右侧打开浏览器面
 - 命令默认超时 60 秒；下载由独立模块计时（单次连接 120 秒后自动断点续传，整体最长 30 分钟）。
 - `/health` 会返回版本与运行时实际能力；Host 代码版本与 Client 不一致时，面板会提示「请重启 DSH」，避免功能静默失败。
 - npm 包名：`dsh-ai-browser`；许可证：MIT（见 `LICENSE`）。
+
+## 许可证 / License
+
+[MIT](LICENSE) © 2026 Akivelli
+
