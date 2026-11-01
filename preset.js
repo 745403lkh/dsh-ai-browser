@@ -18,6 +18,7 @@ import path from 'node:path'
 import { runtime } from './lib/runtime.js'
 import { cancelDownload, listDownloads, pauseDownload, resumeDownload } from './lib/downloads.js'
 import { aiBrowserDataDir } from './lib/home.js'
+import { normalizeHost } from './lib/site-policies.js'
 import {
   ACTION_CAPABILITIES,
   AUTO_REVIEW_ACTIONS,
@@ -47,6 +48,12 @@ const BROWSER_PROMPT = `你在「AI 浏览器模式」下工作：用户对话�
 4. 下载用 download（url 或 index），文件保存到当前工作区的「browser download」文件夹，工具结果会返回保存路径；跨域 CDN 会自动改用 Host 直连下载。用 downloads 动作可以查看已下载文件列表。
 5. 下载任务：用 downloads 查看进行中的任务（含 id、状态 paused/downloading/error、速度与进度）；用 pause_download / resume_download / cancel_download + download_id 暂停、继续或取消任务。
 6. request_access 用法：target_action 指定要执行的动作，同时必须带上该动作需要的参数（open/download/new_window 的 url、click/type 的 index 或 selector、type 的 text 等），并填写 reason。参数缺失会导致调用失败。
+
+站点名单（硬逻辑，用户可在浏览器面板设置里维护）：
+- 四个档位各自有一份站点名单，按主机名精确匹配：名单里写 www.baidu.com 时，只对 www.baidu.com 及其子路径生效，不匹配 fanyi.baidu.com，也不匹配 www.baidu.cn。
+- 命中名单：该站点窗口权限即为名单档位；未命中：一律按「仅可查看」处理。
+- 名单条目有「无需授权访问」开关：开启时 open / new_window 打开该站点不需要申请授权；未开启或站点不在任何名单中，打开前必须先申请授权。
+- 打开外链、新标签页不会继承旧窗口权限，会按目标站点重新套用名单。
 
 权限（每个窗口独立四级，可在面板工具栏刷新按钮右边切换）：
 - 仅可查看：state / windows / read / screenshot / inspect；
@@ -295,6 +302,27 @@ async function requestApproval(ctx, exec, sessionId, input, capability, level, e
     return outcome === 'allowed-once'
   } catch (error) {
     console.error(`[${name}] 浏览器授权请求失败：`, error)
+    return false
+  }
+}
+
+/** 打开站点前的授权（站点名单未开启「无需授权访问」时使用）。 */
+async function requestSiteApproval(ctx, exec, host, detail, reason) {
+  const approval = typeof ctx.get === 'function' ? ctx.get('approval') : undefined
+  if (approval === undefined || approval === null || typeof approval.request !== 'function') return false
+  const reasonText = typeof reason === 'string' && reason !== '' ? reason : '完成当前任务所需'
+  try {
+    const outcome = await approval.request({
+      agent: exec.agent,
+      toolName: TOOL_NAME,
+      ...(exec.callId === undefined ? {} : { callId: exec.callId }),
+      reason: `AI 浏览器授权请求：打开站点 ${host}；${detail}；原因：${reasonText}`,
+      displayReason: `AI 想在浏览器中打开站点 ${host}：${detail}。原因：${reasonText}。是否允许这一次？`,
+      signal: exec.signal,
+    })
+    return outcome === 'allowed-once'
+  } catch (error) {
+    console.error(`[${name}] 站点授权请求失败：`, error)
     return false
   }
 }
@@ -549,6 +577,52 @@ export function createBrowserTool(ctx) {
           data: { job },
           level: state.defaultLevel,
         }
+      }
+
+      if ((action === 'open' || action === 'new_window') && input.url !== '') {
+        const workspace = await runtime.resolveWorkspace(sessionId, true)
+        const policy = runtime.sitePolicies.lookup(input.url, workspace.key)
+        const host = policy !== null ? policy.host : normalizeHost(input.url)
+        if (host === '') return fail(action, '网址无效')
+        if (policy === null || policy.noAuth !== true) {
+          const detail =
+            policy === null
+              ? `站点 ${host} 不在任何权限名单中（未命中名单按「仅可查看」处理）`
+              : `站点 ${host} 在「${levelLabel(policy.level)}」名单中，但未开启「无需授权访问」`
+          const granted = await requestSiteApproval(ctx, exec, host, detail, input.reason)
+          if (!granted) {
+            return fail(
+              action,
+              `操作未执行：${detail}，用户未授权打开该站点。请向用户说明要打开的具体网址和原因，并建议在浏览器面板「设置 → 站点名单」中把该站点加入名单并开启「无需授权访问」；不要重复请求。`,
+              policy === null ? 'view' : policy.level,
+            )
+          }
+        }
+        const targetLevel = policy === null ? 'view' : policy.level
+        const command = commandOf(input)
+        if (command === undefined) return fail(action, '不支持的动作')
+        const currentWindowId = resolveWindowId(input, state)
+        if (action === 'open' && currentWindowId === '') return fail(action, '当前没有浏览器窗口，无法打开网址。')
+        let outcome
+        try {
+          outcome = await runtime.run(sessionId, command.op, command.args, {
+            signal: exec.signal,
+            timeoutMs: TOOL_TIMEOUT_MS,
+            windowId: action === 'new_window' ? '' : currentWindowId,
+          })
+        } catch (error) {
+          outcome = { ok: false, error: { code: String(error?.code ?? 'FAILED'), message: error instanceof Error ? error.message : String(error) } }
+        }
+        if (!outcome.ok) {
+          return fail(action, `浏览器操作失败（${outcome.error?.code ?? 'FAILED'}）：${outcome.error?.message ?? ''}`, targetLevel)
+        }
+        const value = outcome.value ?? {}
+        let targetWindowId = currentWindowId
+        if (action === 'new_window') {
+          targetWindowId = typeof value.activeWindowId === 'string' && value.activeWindowId !== '' ? value.activeWindowId : ''
+        }
+        if (targetWindowId !== '') runtime.setWindowLevel(sessionId, targetWindowId, targetLevel)
+        return buildSuccess(ctx, sessionId, input, command.op, value, targetLevel)
       }
 
       const windowId = resolveWindowId(input, state)

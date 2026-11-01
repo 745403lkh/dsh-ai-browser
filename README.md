@@ -12,7 +12,7 @@ Harness 里的一个应用内浏览器模式：在会话右侧打开浏览器面
 
 - 新建对话时在「标准模式 / 创造模式」之外多一个「AI 浏览器模式」（preset id：`ai-browser`）。
 - 不影响模型与思考强度设置：模型选择、reasoning effort 均沿用原有配置。
-- 选中模式后，会话右侧自动打开浏览器面板，对话区收窄到左侧；面板按会话隔离。
+- 选中模式后，会话右侧自动打开浏览器面板，对话区收窄到左侧；面板按会话隔离。手动关闭面板后，可从输入框「+」命令菜单里的「打开 AI 浏览器」重新打开。
 
 #### 2. 浏览器操作（`browser` 工具）
 
@@ -33,6 +33,7 @@ Harness 里的一个应用内浏览器模式：在会话右侧打开浏览器面
 | 完全权限 | 所有浏览器操作放行 |
 
 - 入口在浏览器面板工具栏：**刷新按钮右侧、网址栏左侧**（独立于工作区修改权限）。
+- **站点名单（硬逻辑，按工作区隔离）**：下载按钮右侧的设置按钮里，每个工作区各自维护四档网址名单（不限数量）。匹配规则：写 `baidu.com` 匹配该域名及所有子域（`www.baidu.com`、`fanyi.baidu.com`）；写 `www.baidu.com` 只匹配该主机；带路径的 `www.baidu.com/xyz` 匹配该路径及下级。命中名单直接使用名单档位，未命中一律仅可查看；条目可开启「无需授权访问」，开启后 AI 打开该站点无需申请授权。新窗口/外链不继承旧权限，按目标站点重新套用名单。
 - 每个窗口有自己的级别；新窗口继承当前窗口级别。
 - 切换到「自动审查」或「完全权限」时弹出风险确认（需勾选「我已了解风险」）。
 - **权限不足时 AI 不会直接结束**：工具会主动发起一次性授权申请，弹窗写明目标窗口/页面、要执行的具体操作和原因（`reason`）；被拒后 AI 向用户解释而不是静默停止。`request_access` 可先申请再执行（需带上目标动作的 URL/index 等参数）。
@@ -140,7 +141,7 @@ The browser is an in-app `<webview>` in the DSH desktop app (no external browser
 
 - A new "AI Browser mode" next to Standard and Create when starting a conversation (preset id: `ai-browser`).
 - It does not change model or thinking-effort settings: model choice and reasoning effort follow the existing configuration.
-- When selected, the browser panel opens automatically on the right and the conversation narrows to the left; the panel is isolated per session.
+- When selected, the browser panel opens automatically on the right and the conversation narrows to the left; the panel is isolated per session. If you close the panel manually, reopen it from "Open AI browser" in the composer's "+" command menu.
 
 #### 2. Browser operations (`browser` tool)
 
@@ -161,6 +162,7 @@ The browser is an in-app `<webview>` in the DSH desktop app (no external browser
 | Full access | All browser actions are allowed |
 
 - The control lives in the browser panel toolbar: **to the right of Refresh and to the left of the address bar** (independent of the workspace modification permission).
+- **Site lists (hard logic, per workspace)**: the settings button right of the download button holds four lists per workspace (no entry limit). A bare domain entry (`baidu.com`) matches the domain and all subdomains (`www.baidu.com`, `fanyi.baidu.com`); a prefixed entry (`www.baidu.com`) matches that host only; a path entry (`www.baidu.com/xyz`) matches that path and its children. Listed sites use that level; unlisted sites are view-only; each entry has "No authorization needed" so the AI can open it without approval. New windows and external links do not inherit the old permission — the target site's list entry is applied instead.
 - Each window has its own level; new windows inherit the current window's level.
 - Switching to Auto review or Full access shows a risk confirmation (requires checking "I understand the risks").
 - **The AI does not stop when permission is insufficient**: the tool raises a one-time approval request that names the target window/page, the exact operation and the reason (`reason`); after a rejection the AI explains instead of silently stopping. `request_access` can ask first and then execute (include the target action's URL/index parameters).

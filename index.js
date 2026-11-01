@@ -35,7 +35,7 @@ const PLUGIN_VERSION = (() => {
 
 /** Host 侧提供的能力（Client 用它判断是否需要重启 DSH）。运行时真实探测，避免热重载后新旧模块混用导致误报。 */
 export function detectedFeatures() {
-  const features = ['download', 'windows-v2', 'proactive-approval', 'request-access', ...DOWNLOAD_FEATURES]
+  const features = ['download', 'windows-v2', 'proactive-approval', 'request-access', 'site-policy', ...DOWNLOAD_FEATURES]
   if (typeof runtime.levelOf === 'function') features.push('per-window-permission')
   return features
 }
@@ -45,21 +45,21 @@ export function detectedFeatures() {
  * @param {object} ctx Host Cordis 上下文。
  */
 export function apply(ctx) {
-  // 会话 preset 判定 + 下载落到当前工作区所需的服务（全部可选：缺失时面板仍可用）。
+  // 合并绑定：两个 inject 回调的先后顺序不固定，后执行的不能把先前绑定的服务覆盖掉。
+  const mergeServices = (patch) => {
+    try {
+      runtime.bindHostServices({ ...(runtime.hostServices ?? {}), ...patch })
+    } catch (error) {
+      console.error(`[${name}] Host 服务绑定失败：`, error)
+    }
+  }
+  // 会话 preset 判定所需的 Agent 服务。
   ctx.inject(['agents', 'agentPresets'], (host) => {
-    try {
-      runtime.bindHostServices({ agents: host.agents, agentPresets: host.agentPresets })
-    } catch (error) {
-      console.error(`[${name}] Agent Preset 服务绑定失败：`, error)
-    }
+    mergeServices({ agents: host.agents, agentPresets: host.agentPresets })
   })
+  // 工作区解析（站点名单按工作区隔离）与下载保存目录所需的 services。
   ctx.inject(['agents', 'workingDirectory'], (host) => {
-    try {
-      const services = runtime.hostServices ?? {}
-      runtime.bindHostServices({ agents: host.agents, workingDirectory: host.workingDirectory, ...services })
-    } catch (error) {
-      console.error(`[${name}] 工作区服务绑定失败：`, error)
-    }
+    mergeServices({ agents: host.agents, workingDirectory: host.workingDirectory })
   })
 
   // webServer 在组合里稍后就绪，通过 ctx.inject 延迟等待。

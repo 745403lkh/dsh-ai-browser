@@ -30,12 +30,14 @@
       var LEVELS = ['view', 'simple', 'review', 'full']
       var DOWNLOAD_CHUNK = 524288
       /** 客户端版本：与 Host /health 返回的版本比对，用于提示「Host 代码仍是旧的，需要重启 DSH」。 */
-      var CLIENT_VERSION = '1.0.1'
+      var CLIENT_VERSION = '1.1.0'
       /** Host 侧提供下载/下载列表能力所需的最小 feature 集。 */
       var REQUIRED_HOST_FEATURES = ['download-url', 'downloads']
 
       var PLUGIN_CTX = null
       var AUTO_OPENED = {}
+      /** sessionId -> 是否 AI 浏览器模式（由 SessionAnchor 的 agentPreset 投影维护）。 */
+      var BROWSER_SESSIONS = {}
       var UI = { state: { menu: null, warning: null, downloads: null, error: null, tick: 0 }, listeners: [] }
 
       function uiNotify() {
@@ -94,6 +96,17 @@
         'panel.failed': '应用内浏览器启动失败',
         'panel.loading': '加载中…',
         'panel.window': '窗口 {n}',
+        'panel.settings': '设置',
+        'settings.title': '站点名单（当前工作区）',
+        'settings.workspace': '工作区',
+        'settings.hint': '名单按当前工作区保存。写 baidu.com 会匹配所有子域；写 www.baidu.com 只匹配该主机；带路径（www.baidu.com/xyz）会匹配该路径及其下级。未命中名单一律仅可查看，开启「无需授权访问」后 AI 打开该站点无需申请授权。',
+        'settings.empty': '暂无站点',
+        'settings.add': '添加',
+        'settings.placeholder': '输入网址，如 www.baidu.com',
+        'settings.noAuth': '无需授权访问',
+        'settings.delete': '删除',
+        'command.open': '打开 AI 浏览器',
+        'command.open.description': '在右侧打开当前会话的 AI 浏览器面板',
         'panel.downloads': '下载内容',
         'downloads.title': '下载',
         'downloads.more': '查看更多',
@@ -151,6 +164,17 @@
         'panel.failed': 'Could not start the in-app browser',
         'panel.loading': 'Loading…',
         'panel.window': 'Window {n}',
+        'panel.settings': 'Settings',
+        'settings.title': 'Site lists (current workspace)',
+        'settings.workspace': 'Workspace',
+        'settings.hint': 'Lists are saved per workspace. A bare domain such as baidu.com matches all subdomains; www.baidu.com matches that host only; a path entry (www.baidu.com/xyz) matches that path and its children. Sites not in any list are view-only; with "No authorization needed" the AI can open the site without approval.',
+        'settings.empty': 'No sites yet',
+        'settings.add': 'Add',
+        'settings.placeholder': 'Enter a URL, e.g. www.baidu.com',
+        'settings.noAuth': 'No authorization needed',
+        'settings.delete': 'Delete',
+        'command.open': 'Open AI browser',
+        'command.open.description': 'Open the AI browser panel for this conversation',
         'panel.downloads': 'Downloads',
         'downloads.title': 'Downloads',
         'downloads.more': 'Show more',
@@ -264,6 +288,7 @@
         folder: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
         play: ['M8 5v14l11-7z'],
         copy: ['M9 9h10v10H9z', 'M5 15V5h10'],
+        settings: ['M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9c.2.6.7 1 1.5 1H21a2 2 0 1 1 0 4h-.1c-.8 0-1.3.4-1.5 1Z'],
         pause: ['M8 5v14', 'M16 5v14'],
       }
 
@@ -651,6 +676,14 @@
         if (projected !== null && typeof projected === 'object') projected = projected.current !== undefined ? projected.current : projected.value
         var [serverEnabled, setServerEnabled] = React.useState(null)
         var enabled = projected === PRESET_ID || (projected === undefined && serverEnabled === true)
+        React.useEffect(
+          function () {
+            if (typeof sessionId !== 'string' || sessionId === '') return undefined
+            BROWSER_SESSIONS[sessionId] = enabled === true
+            return undefined
+          },
+          [enabled, sessionId],
+        )
 
         React.useEffect(
           function () {
@@ -943,8 +976,29 @@
                   if (env.activeId === window.id && !editingRef.current) patch({ address: window.url })
                   sync()
                   report(false)
+                  syncWindowPolicy(window)
                   return { url: window.url, title: window.title, canGoBack: window.canGoBack, canGoForward: window.canGoForward }
                 })
+            }
+            function syncWindowPolicy(window) {
+              if (window === null || typeof window.url !== 'string' || window.url === '') return
+              var host = ''
+              try {
+                host = new URL(window.url).hostname.toLowerCase()
+              } catch (error) {
+                return
+              }
+              if (window.policyHost === host) return
+              window.policyHost = host
+              requestJson('/policy', { method: 'POST', body: { sessionId: sessionId, url: window.url } })
+                .then(function (policy) {
+                  if (!env.alive) return
+                  var level = policy !== null && typeof policy.level === 'string' ? policy.level : 'view'
+                  env.levels[window.id] = level
+                  sync()
+                  report(true)
+                })
+                .catch(function () {})
             }
             function windowsPayload() {
               var windows = []
@@ -1082,9 +1136,8 @@
                   }
                 }
                 env.activeId = window.id
-                var inherited = env.levels[previousActive] || env.defaultLevel || 'view'
-                env.levels[window.id] = inherited
-                requestJson('/level', { method: 'POST', body: { sessionId: sessionId, windowId: window.id, level: inherited } }).catch(function () {})
+                env.levels[window.id] = 'view'
+                requestJson('/level', { method: 'POST', body: { sessionId: sessionId, windowId: window.id, level: 'view' } }).catch(function () {})
                 sync()
                 report(true)
                 var host = containerRefs.current[window.id]
@@ -1533,6 +1586,9 @@
         })
         var activeLevel = ui.levels[ui.activeId] || 'view'
         var [uiSheets, setUiSheets] = React.useState({ menu: null, warning: null, downloads: null })
+        var [settingsOpen, setSettingsOpen] = React.useState(false)
+        var [sites, setSites] = React.useState({ loading: false, lists: { view: [], simple: [], review: [], full: [] }, workspacePath: '', error: '' })
+        var [siteInputs, setSiteInputs] = React.useState({ view: '', simple: '', review: '', full: '' })
         var [acknowledged, setAcknowledged] = React.useState(false)
 
         React.useEffect(function () {
@@ -1560,6 +1616,7 @@
             uiSet({ downloads: null })
             return
           }
+          setSettingsOpen(false)
           uiSet({ menu: null, warning: null, error: null, downloads: { sessionId: sessionId } })
         }
 
@@ -1663,6 +1720,153 @@
           )
         }
 
+        function loadSites() {
+          setSites(function (previous) {
+            return Object.assign({}, previous, { loading: true, error: '' })
+          })
+          requestJson('/sites?sessionId=' + encodeURIComponent(sessionId), { method: 'GET' })
+            .then(function (payload) {
+              setSites({ loading: false, lists: payload.lists || { view: [], simple: [], review: [], full: [] }, workspacePath: payload.workspacePath || '', error: '' })
+            })
+            .catch(function (error) {
+              setSites(function (previous) {
+                return Object.assign({}, previous, { loading: false, error: errorText(error) })
+              })
+            })
+        }
+
+        function openSettings() {
+          setSettingsOpen(function (previous) {
+            if (!previous) {
+              loadSites()
+              uiSet({ menu: null, warning: null, downloads: null })
+            }
+            return !previous
+          })
+        }
+
+        function saveSite(level, host, noAuth) {
+          requestJson('/sites', { method: 'POST', body: { sessionId: sessionId, action: 'set', level: level, host: host, noAuth: noAuth === true } })
+            .then(function (payload) {
+              setSites({ loading: false, lists: payload.lists || sites.lists, workspacePath: payload.workspacePath || sites.workspacePath || '', error: '' })
+            })
+            .catch(function (error) {
+              setSites(function (previous) {
+                return Object.assign({}, previous, { error: errorText(error) })
+              })
+            })
+        }
+
+        function removeSite(host) {
+          requestJson('/sites', { method: 'POST', body: { sessionId: sessionId, action: 'remove', host: host } })
+            .then(function (payload) {
+              setSites({ loading: false, lists: payload.lists || sites.lists, workspacePath: payload.workspacePath || sites.workspacePath || '', error: '' })
+            })
+            .catch(function (error) {
+              setSites(function (previous) {
+                return Object.assign({}, previous, { error: errorText(error) })
+              })
+            })
+        }
+
+        function settingsSheet() {
+          if (!settingsOpen) return null
+          return h(
+            'div',
+            { className: 'dsh-ab-sheet dsh-ab-sites' },
+            h(
+              'div',
+              { className: 'dsh-ab-sheet-head' },
+              h('span', { className: 'dsh-ab-sheet-title' }, t('settings.title')),
+              h(
+                'button',
+                { type: 'button', className: 'dsh-ab-dl-icon-btn', title: t('downloads.close'), onClick: function () { setSettingsOpen(false) } },
+                icon(ICONS.close, 14),
+              ),
+            ),
+            sites.workspacePath !== '' ? h('div', { className: 'dsh-ab-dl-status' }, t('settings.workspace') + '：' + sites.workspacePath) : null,
+            h('div', { className: 'dsh-ab-sheet-desc' }, t('settings.hint')),
+            sites.error !== '' ? h('div', { className: 'dsh-ab-dl-error' }, sites.error) : null,
+            LEVELS.map(function (level) {
+              var entries = sites.lists[level] || []
+              return h(
+                'div',
+                { key: level, className: 'dsh-ab-sites-section' },
+                h('div', { className: 'dsh-ab-sites-head' }, t('perm.' + level)),
+                entries.length === 0
+                  ? h('div', { className: 'dsh-ab-sites-empty' }, t('settings.empty'))
+                  : entries.map(function (entry) {
+                      return h(
+                        'div',
+                        { key: entry.host, className: 'dsh-ab-sites-row' },
+                        h('span', { className: 'dsh-ab-sites-host', title: entry.host }, entry.host),
+                        h(
+                          'label',
+                          { className: 'dsh-ab-sites-toggle', title: t('settings.noAuth') },
+                          h('input', {
+                            type: 'checkbox',
+                            checked: entry.noAuth === true,
+                            onChange: function () {
+                              saveSite(level, entry.host, entry.noAuth !== true)
+                            },
+                          }),
+                          h('span', null, t('settings.noAuth')),
+                        ),
+                        h(
+                          'button',
+                          { type: 'button', className: 'dsh-ab-dl-icon-btn', title: t('settings.delete'), onClick: function () { removeSite(entry.host) } },
+                          icon(ICONS.close, 12),
+                        ),
+                      )
+                    }),
+                h(
+                  'div',
+                  { className: 'dsh-ab-sites-add' },
+                  h('input', {
+                    type: 'text',
+                    className: 'dsh-ab-sites-input',
+                    value: siteInputs[level] || '',
+                    placeholder: t('settings.placeholder'),
+                    spellCheck: false,
+                    onChange: function (event) {
+                      var value = event.target.value
+                      setSiteInputs(function (previous) {
+                        return Object.assign({}, previous, { [level]: value })
+                      })
+                    },
+                    onKeyDown: function (event) {
+                      if (event.key !== 'Enter') return
+                      event.preventDefault()
+                      var value = (siteInputs[level] || '').trim()
+                      if (value === '') return
+                      saveSite(level, value, false)
+                      setSiteInputs(function (previous) {
+                        return Object.assign({}, previous, { [level]: '' })
+                      })
+                    },
+                  }),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'dsh-ab-btn',
+                      onClick: function () {
+                        var value = (siteInputs[level] || '').trim()
+                        if (value === '') return
+                        saveSite(level, value, false)
+                        setSiteInputs(function (previous) {
+                          return Object.assign({}, previous, { [level]: '' })
+                        })
+                      },
+                    },
+                    t('settings.add'),
+                  ),
+                ),
+              )
+            }),
+          )
+        }
+
         function permissionButton() {
           return h(
             'button',
@@ -1673,6 +1877,7 @@
               onClick: function (event) {
                 event.stopPropagation()
                 if (ui.activeId === '') return
+                setSettingsOpen(false)
                 if (UI.state.menu !== null) {
                   uiSet({ menu: null })
                   return
@@ -1766,7 +1971,9 @@
               }),
             ),
             h('button', { type: 'button', className: 'dsh-ab-tool dsh-ab-tool-download', title: t('panel.downloads'), onClick: openDownloads }, icon(ICONS.download, 16)),
+            h('button', { type: 'button', className: 'dsh-ab-tool', title: t('panel.settings'), onClick: openSettings }, icon(ICONS.settings, 16)),
           ),
+          settingsOpen ? settingsSheet() : null,
           uiSheets.downloads !== null ? h(DownloadsPopup, { t: t, sessionId: sessionId }) : null,
           uiSheets.warning !== null ? warningSheet() : null,
           uiSheets.menu !== null && uiSheets.warning === null ? permissionSheet() : null,
@@ -1889,6 +2096,16 @@
 .dsh-ab-sheet-ack{display:flex;align-items:flex-start;gap:8px;padding:2px 4px 6px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);cursor:pointer}
 .dsh-ab-sheet-ack input{margin-top:2px}
 .dsh-ab-sheet-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:2px}
+.dsh-ab-sites{max-height:60vh}
+.dsh-ab-sites-section{display:flex;flex-direction:column;gap:4px;padding:6px 0;border-top:.5px solid var(--dsw-alias-border-l3)}
+.dsh-ab-sites-head{font-size:12px;font-weight:600;color:var(--dsw-alias-label-secondary);padding:0 4px}
+.dsh-ab-sites-empty{font:var(--dsw-font-xxxs-11);color:var(--dsw-alias-label-tertiary);padding:0 4px}
+.dsh-ab-sites-row{display:flex;align-items:center;gap:8px;padding:2px 4px}
+.dsh-ab-sites-host{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:18px}
+.dsh-ab-sites-toggle{display:flex;align-items:center;gap:4px;font:var(--dsw-font-xxxs-11);color:var(--dsw-alias-label-tertiary);cursor:pointer;white-space:nowrap}
+.dsh-ab-sites-add{display:flex;gap:6px;padding:4px}
+.dsh-ab-sites-input{flex:1;min-width:0;height:26px;padding:0 8px;border-radius:var(--dsw-radius-sm);border:.5px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:12px;outline:none}
+.dsh-ab-sites-input:focus{border-color:var(--dsw-alias-state-business-primary)}
 .dsh-ab-dl-head{display:flex;align-items:center;justify-content:space-between;padding:10px 10px 8px 14px;flex:none}
 .dsh-ab-dl-title{font-size:14px;font-weight:600;line-height:20px}
 .dsh-ab-dl-head-actions{display:flex;gap:2px}
@@ -1915,6 +2132,19 @@
       // ------------------------------------------------------------------
       // Cordis Client 插件
       // ------------------------------------------------------------------
+      /** 会话是否为 AI 浏览器模式（供命令菜单过滤）。 */
+      function isBrowserPresetSession(session) {
+        try {
+          if (session !== null && session !== undefined && session.agentPreset === PRESET_ID) return true
+          var face = session !== null && session !== undefined && session.projections !== undefined && typeof session.projections.faceOf === 'function' ? session.projections.faceOf('agentPreset') : null
+          var value = face !== null && typeof face.getSnapshot === 'function' ? face.getSnapshot() : undefined
+          if (value !== null && typeof value === 'object') value = value.current !== undefined ? value.current : value.value
+          return value === PRESET_ID
+        } catch (error) {
+          return false
+        }
+      }
+
       function apply(ctx) {
         PLUGIN_CTX = ctx
         ctx.effect(function () {
@@ -1969,6 +2199,39 @@
             return function () {}
           }
         }, NS + ': session anchor')
+        ctx.inject(['commandUi'], function (scope) {
+          try {
+            var command = typeof scope.get === 'function' ? scope.get('commandUi') : scope.commandUi
+            if (command === null || command === undefined || typeof command.register !== 'function') return
+            scope.effect(function () {
+              return command.register({
+                name: 'ai-browser-open',
+                label: function () {
+                  return t('command.open')
+                },
+                description: function () {
+                  return t('command.open.description')
+                },
+                available: function (session) {
+                  if (session !== null && session !== undefined && typeof session.sessionId === 'string' && BROWSER_SESSIONS[session.sessionId] === true) return true
+                  return isBrowserPresetSession(session)
+                },
+                ui: {
+                  kind: 'action',
+                  run: function () {
+                    try {
+                      ctx.sidebarRight.openTab(TAB_KIND, {})
+                    } catch (error) {
+                      console.error('[dsh-ai-browser] 打开浏览器面板失败：', error)
+                    }
+                  },
+                },
+              })
+            }, NS + ': command contribution')
+          } catch (error) {
+            console.error('[dsh-ai-browser] 注册命令菜单入口失败：', error)
+          }
+        }, NS + ': commandUi')
       }
 
       return { name: NS, inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs'], apply: apply }

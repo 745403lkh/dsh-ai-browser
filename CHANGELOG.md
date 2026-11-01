@@ -1,5 +1,49 @@
 # 更新日志 / Changelog
 
+## [1.1.0] - 2026-11-01
+
+### 中文
+
+**新增**
+- 站点名单（按工作区隔离）：工具栏下载按钮右侧新增设置按钮，四个权限档位各自维护一份网址名单，不设数量上限；每个条目带「无需授权访问」开关。
+- 硬逻辑匹配：`baidu.com` 匹配该域名及所有子域（`www.baidu.com`、`fanyi.baidu.com` 都生效）；`www.baidu.com` 只匹配该主机；`www.baidu.com/xyz` 匹配该路径及其下级；多条同时命中时取更具体的一条。
+- 命中名单的站点，窗口权限直接采用名单档位；未命中一律仅可查看，AI 打开前必须申请授权；开启「无需授权访问」的站点，AI 可以直接打开。
+- AI 浏览器模式会话的输入框「+」命令菜单新增「打开 AI 浏览器」，手动关闭右侧浏览器面板后可随时重新打开。
+- 新增只读诊断接口 `/debug-workspace`，可查看某个会话的工作区解析链路。
+
+**改进**
+- 站点权限改为随页面站点动态计算：新窗口、外链、新标签页不再继承旧窗口权限，主机名变化时立即按目标站点名单重算。
+- 工作区解析更稳：优先用 `workingDirectory.get(session)` 同步读取，失败再回退 `ensure`；名单读写和打开站点前强制刷新工作区缓存（2 秒 TTL），切换工作区后立即生效。
+
+**修复**
+- 修复站点名单跨工作区串数据：Host 侧两个 `ctx.inject` 回调会互相覆盖 `workingDirectory` 服务，导致所有会话退回默认工作区、名单变成全局共享。
+- 修复手动关闭 AI 浏览器面板后再也无法打开的问题。
+- 修复「+」命令菜单取不到会话模式、导致「打开 AI 浏览器」入口不显示的问题。
+
+**测试**
+- 3 个自测套件全部通过：下载 25 项、Host/工具 61 项、Client 40 项。
+
+### English
+
+**Added**
+- Site lists (per workspace): a settings button to the right of the download button; each of the four permission levels keeps its own URL list with no entry limit, and every entry has a "No authorization needed" toggle.
+- Hard-logic matching: `baidu.com` matches the domain and all its subdomains (`www.baidu.com`, `fanyi.baidu.com`); `www.baidu.com` matches that host only; `www.baidu.com/xyz` matches that path and its children; when several entries match, the most specific one wins.
+- Listed sites adopt that list's level; unlisted sites are view-only and the AI must request approval before opening them; with "No authorization needed" enabled the AI opens the site directly.
+- "Open AI browser" in the composer's "+" command menu of AI Browser conversations, so the panel can be reopened after being closed manually.
+- A read-only `/debug-workspace` diagnostic endpoint for inspecting a session's workspace resolution chain.
+
+**Changed**
+- Site permission is now derived from the current page's host: new windows, external links and popup tabs no longer inherit the previous window level; changing the hostname re-applies the target site's list entry.
+- More robust workspace resolution: prefer the synchronous `workingDirectory.get(session)`, fall back to `ensure`; list reads/writes and opening a site force-refresh the workspace cache (2s TTL), so switching workspaces takes effect immediately.
+
+**Fixed**
+- Site lists leaked across workspaces: two Host `ctx.inject` callbacks overwrote each other's `workingDirectory` service, making every session fall back to the default workspace and the lists effectively global.
+- The AI browser panel could not be reopened after being closed manually.
+- The "+" command menu could not read the session preset, so the "Open AI browser" entry was hidden.
+
+**Testing**
+- All 3 test suites pass: 25 download checks, 61 host/tool checks and 40 client checks.
+
 ## [1.0.1] - 2026-10-31
 
 ### 中文
