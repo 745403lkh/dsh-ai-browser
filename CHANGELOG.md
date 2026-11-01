@@ -1,5 +1,61 @@
 # 更新日志 / Changelog
 
+## [1.1.1] - 2026-11-01
+
+### 中文
+
+**新增**
+- 收藏与历史记录：工具栏新增收藏（星形）和历史按钮，内联面板可查看、打开、删除收藏，查看和清空历史；两者都按工作区独立存储（历史最多 500 条，同 URL 连续访问自动去重）。
+- AI 可以通过浏览器工具的 `bookmarks` / `history` 动作读取当前工作区的收藏和历史记录。
+- 权限预设：Harness 设置新增「AI 浏览器」页，可创建多个预设、自定义名字、编辑四档站点名单、设默认预设；新工作区第一次打开浏览器模式时自动套用默认预设，浏览器面板设置里可一键把预设应用到当前工作区。
+- 预设搜索：设置页和面板设置里的预设列表都支持按名字搜索（不区分大小写）。
+- 预设导入/导出：使用人类可读的 `.txt` 格式（`# name:` 头 + `[view]/[simple]/[review]/[full]` 分节，条目可带 ` !noauth`），方便分享；面板支持「存为预设 / 导出当前工作区 / 导入到当前工作区」，设置页支持导入预设和逐条导出。
+- 权限设置里的站点名单超过 3 条时自动折叠（每档独立展开/收起）。
+- 黑白简笔画地球作为 AI 浏览器核心视觉：会话列表左侧图标、输入框「+」菜单的「打开 AI 浏览器」、Harness 设置页入口都使用地球。
+
+**改进**
+- 站点名单改为按工作区隔离；工作区解析改为优先 `workingDirectory.get(session)`，并加入 2 秒缓存与强制刷新，切换工作区立即生效。
+- 站点权限随页面站点动态计算：新窗口、外链、新标签页不再继承旧窗口权限，主机名变化立即按目标站点名单重算。
+- 侧边栏地球只在浏览器模式会话真正执行任务时旋转；新增侧栏会话行状态桥接，离开对话界面后仍按真实运行状态显示静态/旋转地球。
+- 下载型弹窗不再残留空白标签页：自动识别并关闭 `window.open` 下载弹窗以及加载后仍空白/无标题的弹窗。
+
+**修复**
+- 修复站点名单跨工作区串数据：Host 侧两个 `ctx.inject` 回调互相覆盖 `workingDirectory` 服务，导致所有会话退回默认工作区。
+- 修复手动关闭 AI 浏览器面板后无法再打开、「+」菜单入口不显示的问题。
+- 修复浏览器运行状态离开对话页后变回通用转圈的问题。
+- 修复下载任务 `pause_download / resume_download / cancel_download` 的 `downloadId` 参数被归一化丢弃、导致无法控制任务的问题。
+- 修复旧版全局收藏/历史数据迁移，统一升级为按工作区的 v2 存储。
+
+**测试**
+- 全部自测通过：下载 25 项、Host/工具 61 项、客户端 51 项、1.1.1 Host 用例 131 项，合计 268 项。
+
+### English
+
+**Added**
+- Bookmarks and history: new star and history buttons in the toolbar; inline panels list/open/delete bookmarks and view/clear history; both are stored per workspace (history capped at 500 entries, consecutive visits to the same URL are de-duplicated).
+- The AI can read the current workspace's bookmarks and history through the browser tool's `bookmarks` / `history` actions.
+- Permission presets: a new "AI Browser" page in Harness Settings to create multiple presets, name them, edit the four site lists and set a default preset. A new workspace applies the default preset automatically the first time AI Browser mode is used, and the browser panel settings can apply a preset to the current workspace in one click.
+- Preset search: preset lists in both Settings and the browser panel can be filtered by name (case-insensitive).
+- Preset import/export in a human-readable `.txt` format (`# name:` header plus `[view]/[simple]/[review]/[full]` sections, entries may end with ` !noauth`) for sharing; the panel offers "Save as preset / Export current workspace / Import into current workspace", and Settings supports importing presets and exporting each preset.
+- Site lists in permission settings automatically collapse when a level has more than 3 entries (independently expandable per level).
+- Black-and-white line-art Earth as the core AI Browser visual: the sidebar session marker, the "Open AI browser" item in the composer "+" menu and the Harness Settings page entry all use the Earth icon.
+
+**Changed**
+- Site lists are now scoped per workspace; workspace resolution prefers `workingDirectory.get(session)` with a 2-second cache and forced refresh, so switching workspaces takes effect immediately.
+- Site permission is derived from the current page host: new windows, external links and popup tabs no longer inherit the previous window level; changing the hostname re-applies the target site's list entry.
+- The sidebar Earth rotates only while an AI Browser session is actually running; a new sidebar session-row bridge keeps the real state outside the conversation view.
+- Download popups no longer leave a blank tab: `window.open` download popups and popups that stay blank/title-less after loading are detected and closed automatically.
+
+**Fixed**
+- Site lists leaked across workspaces because two Host `ctx.inject` callbacks overwrote each other's `workingDirectory` service, making every session fall back to the default workspace.
+- The AI browser panel could not be reopened after being closed manually, and the "+" menu entry was hidden.
+- The sidebar running state fell back to the generic spinner after leaving the conversation view.
+- `pause_download / resume_download / cancel_download` lost their `downloadId` during argument normalization, so real download jobs could not be controlled.
+- Legacy global bookmark/history data is migrated to the per-workspace v2 storage.
+
+**Testing**
+- All suites pass: 25 download, 61 host/tool, 51 client and 131 new 1.1.1 host checks — 268 checks in total.
+
 ## [1.1.0] - 2026-11-01
 
 ### 中文

@@ -46,7 +46,8 @@ const BROWSER_PROMPT = `你在「AI 浏览器模式」下工作：用户对话�
 2. 复杂任务可以 new_window 开新窗口并行处理（例如一个窗口查资料、一个窗口填表），不会互相影响。页面里会打开新标签页的按钮/链接（target=_blank、window.open）会自动新建窗口并切换到新窗口，你可以直接用 window 参数操作它；窗口数量不限。
 3. 打开网页用 open；读页面用 read（返回正文 + 带 index 的可交互元素）；click/type 用 read 返回的 index；页面跳转后重新 read。
 4. 下载用 download（url 或 index），文件保存到当前工作区的「browser download」文件夹，工具结果会返回保存路径；跨域 CDN 会自动改用 Host 直连下载。用 downloads 动作可以查看已下载文件列表。
-5. 下载任务：用 downloads 查看进行中的任务（含 id、状态 paused/downloading/error、速度与进度）；用 pause_download / resume_download / cancel_download + download_id 暂停、继续或取消任务。
+5. 收藏与历史：用 bookmarks 读取当前工作区的收藏列表，用 history 读取当前工作区的历史记录（两者都按工作区隔离）；
+6. 下载任务：用 downloads 查看进行中的任务（含 id、状态 paused/downloading/error、速度与进度）；用 pause_download / resume_download / cancel_download + download_id 暂停、继续或取消任务。
 6. request_access 用法：target_action 指定要执行的动作，同时必须带上该动作需要的参数（open/download/new_window 的 url、click/type 的 index 或 selector、type 的 text 等），并填写 reason。参数缺失会导致调用失败。
 
 站点名单（硬逻辑，用户可在浏览器面板设置里维护）：
@@ -78,7 +79,7 @@ const PARAMETERS = {
       type: 'string',
       enum: ACTIONS,
       description:
-        'state 查看当前状态；windows 列出窗口；downloads 查看已下载文件；read 读取页面；open 打开网址；click/type/press 操作元素；scroll 滚动；' +
+        'state 查看当前状态；windows 列出窗口；downloads 查看已下载文件；bookmarks 读取当前工作区收藏；history 读取当前工作区历史记录；read 读取页面；open 打开网址；click/type/press 操作元素；scroll 滚动；' +
         'back/forward/reload 导航；screenshot 截图；download 下载文件；new_window 新建窗口；close_window 关闭窗口；' +
         'pause_download/resume_download/cancel_download 用 download_id 暂停/继续/取消下载任务；request_access 主动申请一次授权（需 target_action、目标动作参数与 reason）。',
     },
@@ -153,6 +154,7 @@ function normalizeArgs(raw) {
     amount: typeof args.amount === 'number' && Number.isFinite(args.amount) ? Math.max(1, Math.min(10, args.amount)) : 1,
     maxChars: Number.isInteger(args.maxChars) ? Math.max(1000, Math.min(40000, args.maxChars)) : 12000,
     filename: asString(args.filename, 200).trim(),
+    downloadId: asString(args.downloadId ?? args.download_id, 128).trim(),
     targetAction: asString(args.target_action, 40),
     reason: asString(args.reason, 1000).trim(),
   }
@@ -545,6 +547,27 @@ export function createBrowserTool(ctx) {
           summary: `【AI 浏览器】窗口与权限：\n${formatWindows(state)}`,
           data: { windows: state.windows },
           level: state.defaultLevel,
+        }
+      }
+
+      if (action === 'bookmarks' || action === 'history') {
+        const workspace = await runtime.resolveWorkspace(sessionId, true)
+        const library = runtime.library.snapshot(workspace.key)
+        if (action === 'bookmarks') {
+          const lines = library.bookmarks.length === 0 ? '（当前工作区没有收藏）' : library.bookmarks.map((item, index) => `${index + 1}. ${item.title}\n   ${item.url}`).join('\n')
+          return {
+            ok: true,
+            action,
+            summary: `【AI 浏览器】当前工作区收藏（${library.bookmarks.length} 条，工作区：${workspace.path || '默认工作区'}）：\n${lines}`,
+            data: { workspacePath: workspace.path, bookmarks: library.bookmarks },
+          }
+        }
+        const lines = library.history.length === 0 ? '（当前工作区没有历史记录）' : library.history.map((item, index) => `${index + 1}. ${item.title}\n   ${item.url}`).join('\n')
+        return {
+          ok: true,
+          action,
+          summary: `【AI 浏览器】当前工作区历史记录（最近 ${library.history.length} 条，工作区：${workspace.path || '默认工作区'}）：\n${lines}`,
+          data: { workspacePath: workspace.path, history: library.history },
         }
       }
 

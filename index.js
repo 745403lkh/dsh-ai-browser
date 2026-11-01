@@ -35,7 +35,7 @@ const PLUGIN_VERSION = (() => {
 
 /** Host 侧提供的能力（Client 用它判断是否需要重启 DSH）。运行时真实探测，避免热重载后新旧模块混用导致误报。 */
 export function detectedFeatures() {
-  const features = ['download', 'windows-v2', 'proactive-approval', 'request-access', 'site-policy', ...DOWNLOAD_FEATURES]
+  const features = ['download', 'windows-v2', 'proactive-approval', 'request-access', 'site-policy', 'library', 'permission-presets', ...DOWNLOAD_FEATURES]
   if (typeof runtime.levelOf === 'function') features.push('per-window-permission')
   return features
 }
